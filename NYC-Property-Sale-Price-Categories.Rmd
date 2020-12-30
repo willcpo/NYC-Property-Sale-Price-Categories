@@ -1,0 +1,51 @@
+---
+title: "ChooseYourOwn_Report"
+author: "Will Powers"
+date: "12/28/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+The report documents the analysis and presents the findings, along with supporting statistics and figures. In order to demonstrate your understanding of course material, please provide thorough explanation or justification for various steps of your project, such as why a specific train/test split (e.g. 50/50 vs 90/10) or algorithm was used.
+
+#	Overview 
+
+- split up NYC realestate sale prices by Percentiles by YEAR grouped into 5 categories, Very Cheap, Cheap, Moderate, expensive, very expensive
+
+
+
+## The Dataset
+     
+     https://www.kaggle.com/new-york-city/nyc-property-sales
+     - modified to have sale prices into X categories 
+            - based on census project https://www.kaggle.com/uciml/adult-census-income
+      
+     
+## Variables
+
+##	Project Goals
+
+##	Key Steps
+
+#	Methods & Analysis
+## Process 
+## Techniques
+### Data Cleaning
+###	Data Exploration 
+###	Data Visualization
+###	Insights 
+###	Modeling Approach
+
+ At least two different models or algorithms must be used, with at least one being more advanced than linear or logistic regression for prediction problems.
+
+#	Final Model
+##	Results 
+        RMSE <= .86490
+##	Performance
+
+#	conclusion
+##	Summary
+##	Limitations 
+##	Future work
