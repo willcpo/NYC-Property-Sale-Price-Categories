@@ -8,26 +8,13 @@
          # If your dataset is provided as a zip file in GitHub, your code should automatically unzip and load it.
 
 ##########################################################
-# Create Helper Functions
+# Create Helper Functions if needed
 ##########################################################
-
-#Function to calculate the Root Mean Squared Error
-calcRMSE <- function(predictedResult, actualResult){
-  # calculate difference between the predicted and actual results
-  error <- predictedResult - actualResult
-  # square the error
-  squaredError <- error^2
-  #find the mean of all the squared errors
-  meanSquaredError <- mean(squaredError)
-  # take the square root of the mean
-  sqrt(meanSquaredError)
-}
-
 
 # Install Required Packages
 options(install.packages.compile.from.source = "always")
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
-if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org", dependencies = TRUE)
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(forecast)) install.packages('forecast', dependencies = TRUE, repos = "http://cran.us.r-project.org")
 
@@ -36,10 +23,25 @@ if(!require(forecast)) install.packages('forecast', dependencies = TRUE, repos =
 ###########################
 
 # TODO: FROM FILE
-read_csv("./indian_liver_patient.csv")
+liverData <- read_csv("https://raw.githubusercontent.com/willcpo/liver-disease-analysis/main/indian_liver_patient.csv")
+pca <- liverData %>% mutate(Gender = as.numeric(as.factor(Gender))) %>% prcomp()
+
 ###########################
 # Data Exploration
 ###########################
+
+# Check for NAN values
+sum(is.na(liverData))
+
+# remove NA values 
+liverData <- na.omit(liverData)
+
+# confirm NAs removed
+sum(is.na(liverData))
+
+# check for features with little variation
+nearZeroVar(liverData)
+
 
 
 ###########################
@@ -48,15 +50,20 @@ read_csv("./indian_liver_patient.csv")
 
 
 ###########################
-# Dimension Reduction and PCA
+# Data Preparation
 ###########################
 
+#Make predictions factors for training model
+liverData <- liverData %>% mutate(Dataset=as.factor(Dataset))
 
 ####################################
 #Create Train & Validation sets
 ####################################
 
+test_index <- createDataPartition(liverData$Age, times = 1, p = 0.5, list = FALSE)
 
+validationSet <- liverData[test_index, ]
+train_set <- liverData[-test_index, ]
 
 ####################################
 # Create Model w/ Train Set 
@@ -65,16 +72,31 @@ read_csv("./indian_liver_patient.csv")
 # TODO:  At least two different models or algorithms must be used, with at least one being more advanced than linear or logistic regression for prediction problems.
 
 
+model <- train(Dataset~., data=train_set, method="knn")
 
+confusionMatrix(model)
+# accuracy() ??
 ####################################
 #	Test Model with Validation Set
 ####################################
-
 
 ####################################
 # Accuracy and Performance
 ####################################
 
-# Calculate RMSE
+# Confusion Matrix? 
+#confusionMatrix()
+# Accuracy ?
+# RMSE? or MSE?
 
 # Time Took by Final Modeling against Validation Set
+
+
+
+####################################
+# Further Analysis
+####################################
+
+# check PCA
+pca <- liverData %>% mutate(Gender = as.numeric(as.factor(Gender))) %>% prcomp(scale=TRUE, center=TRUE)
+summary(pca)

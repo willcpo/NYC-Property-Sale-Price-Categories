@@ -32,7 +32,8 @@ https://www.kaggle.com/uciml/indian-liver-patient-records
      - modified to have sale prices into X categories 
             - based on census project https://www.kaggle.com/uciml/adult-census-income
             
-
+      ^^^ MAYBE.... CHECK OTHER EXAMPLES And SEE what novel things you can do with Regression
+      
      
 ## Variables
 
