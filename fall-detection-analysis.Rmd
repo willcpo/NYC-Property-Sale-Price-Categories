@@ -8,56 +8,475 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-The report documents the analysis and presents the findings, along with supporting statistics and figures. In order to demonstrate your understanding of course material, please provide thorough explanation or justification for various steps of your project, such as why a specific train/test split (e.g. 50/50 vs 90/10) or algorithm was used.
 
-#	Overview 
+```{r code, echo=FALSE, results = 'hide', fig.show='hide', message=FALSE, warning=FALSE}
+###############################################################
+# Install Required Packages
+###############################################################
+set.seed(1, sample.kind="Rounding")
+options(install.packages.compile.from.source = "always")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(Rborist)) install.packages('Rborist', dependencies = TRUE, repos = "http://cran.us.r-project.org")
 
-TODO: Summarize Following information about the data
+###############################################################
+# Import Data 
+###############################################################
+fallData <- read_csv("https://raw.githubusercontent.com/willcpo/fall-detection-analysis/main/falldeteciton.csv")
+
+###############################################################
+# Data Exploration
+###############################################################
+
+# Check for NAN values
+amtNANValues <- sum(is.na(fallData))
+# None Detected
+amtNANValues
+
+# check for features with little variation
+columnsNearZero <- nearZeroVar(fallData)
+# None Detected
+columnsNearZero
+
+fallDataRowIndexes <- 1:length(fallData$ACTIVITY)
+rowCorrelation <- cor(fallDataRowIndexes, fallData$ACTIVITY)
+rowCorrelation
+
+###############################################################
+# Data Preparation
+###############################################################
+
+#Alter Activity Column as Falling or not falling
+fallData <- fallData %>% mutate(ACTIVITY=as.factor(ACTIVITY==3))
+#Reverses factor order to make TRUE the positive class
+fallData <- fallData %>% mutate(ACTIVITY=factor(ACTIVITY, levels=rev(levels(ACTIVITY)),labels = make.names(rev(levels(ACTIVITY)))))
+
+
+###############################################################
+#Create Train & Validation sets
+###############################################################
+
+test_index <- createDataPartition(fallData$ACTIVITY, times = 1, p = 0.5, list = FALSE)
+
+validationSet <- fallData[test_index, ]
+remainderSet <- fallData[-test_index, ]
+
+test_index <- createDataPartition(remainderSet$ACTIVITY, times = 1, p = 0.25, list = FALSE)
+crossValidation1 <- remainderSet[test_index, ]
+remainderSet <- remainderSet[-test_index, ]
+
+test_index <- createDataPartition(remainderSet$ACTIVITY, times = 1, p = 0.33, list = FALSE)
+crossValidation2 <- remainderSet[test_index, ]
+remainderSet <- remainderSet[-test_index, ]
+
+test_index <- createDataPartition(remainderSet$ACTIVITY, times = 1, p = 0.5, list = FALSE)
+crossValidation3 <- remainderSet[test_index, ]
+crossValidation4 <- remainderSet[-test_index, ]
+
+########################################################################
+# Create KNN Model w/ 1st Cross Validation Set 
+########################################################################
+
+train_knn1 <- train(ACTIVITY ~ ., method = "knn", 
+                   data = crossValidation1,
+                   metric="Accuracy",
+                   tuneGrid = data.frame(k = seq(9, 71, 2)))
+# Plot best value of k
+plot_knn1 <-ggplot(train_knn1, highlight = TRUE)
+plot_knn1
+# Predict training set for confusion Matrix
+predictions_knn1 <- predict(train_knn1, crossValidation1)
+# Get Accuracy information with confusion matrix
+confusionMatrix_knn1 <- confusionMatrix(predictions_knn1, crossValidation1$ACTIVITY)
+confusionMatrix_knn1
+#
+# Redo optimizing for sensitivity
+#
+
+# Train using KNN
+train_knn2 <- train(ACTIVITY ~ ., method = "knn", 
+                   data = crossValidation1,
+                   tuneGrid = data.frame(k = seq(9, 71, 2)),
+                   metric = "Sens",
+                   trControl=trainControl(method="cv", 
+                                          number=5,
+                                          summaryFunction = twoClassSummary,
+                                          classProbs = TRUE,
+                                          savePredictions='all'))
+# Plot best value of k
+plot_knn2 <- ggplot(train_knn2, highlight = TRUE)
+plot_knn2
+# Predict training set for confusion Matrix
+predictions_knn2 <- predict(train_knn2, crossValidation1)
+# Get Accuracy information with confusion matrix
+confusionMatrix_knn2 <- confusionMatrix(predictions_knn2, crossValidation1$ACTIVITY)
+confusionMatrix_knn2
+########################################################################
+# Create QDA Model w/ 2nd Cross Validation Set 
+########################################################################
+
+train_qda <- train(ACTIVITY ~ ., method = "qda", 
+                   data = crossValidation2,
+                   metric = "Sens",
+                   trControl=trainControl(method="cv", 
+                                          number=5,
+                                          summaryFunction = twoClassSummary,
+                                          classProbs = TRUE,
+                                          savePredictions='all'))
+# Predict training set for confusion Matrix
+predictions_qda <- predict(train_qda, crossValidation2)
+# Get Accuracy information with confusion matrix
+confusionMatrix_qda <- confusionMatrix(predictions_qda, crossValidation2$ACTIVITY)
+confusionMatrix_qda
+
+########################################################################
+# Create Classification Tree Model w/ 3rd Cross Validation Set 
+########################################################################
+
+train_rpart <- train(ACTIVITY ~ ., method = "rpart", 
+                     data = crossValidation3,
+                     metric = "Sens",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     trControl=trainControl(method="cv", 
+                                            number=5,
+                                            summaryFunction = twoClassSummary,
+                                            classProbs = TRUE,
+                                            savePredictions='all'))
+
+# Plot best value of k
+plot_rpart <- ggplot(train_rpart, highlight = TRUE)
+plot_rpart
+# Predict training set for confusion Matrix
+predictions_rpart <- predict(train_rpart, crossValidation3)
+# Get Accuracy information with confusion matrix
+confusionMatrix_rpart <- confusionMatrix(predictions_rpart, crossValidation3$ACTIVITY)
+confusionMatrix_rpart
+
+########################################################################
+# Create Random Forest Model w/ 4th Cross Validation Set 
+########################################################################
+
+train_rf <- train(ACTIVITY ~ ., method = "Rborist", 
+                  data = crossValidation4,
+                  metric = "Sens",
+                  tuneGrid = data.frame(predFixed = 2, minNode = c(3, 50)),
+                  trControl=trainControl(method="cv", 
+                                         number=5,
+                                         summaryFunction = twoClassSummary,
+                                         classProbs = TRUE,
+                                         savePredictions='all'))
+
+# Plot best value of k
+plot_rf <- ggplot(train_rf, highlight = TRUE)
+plot_rf
+
+# Predict training set for confusion Matrix
+predictions_rf <- predict(train_rf, crossValidation4)
+# Get Accuracy information with confusion matrix
+confusionMatrix_rf <- confusionMatrix(predictions_rf, crossValidation4$ACTIVITY)
+confusionMatrix_rf
+
+####################################
+#	Test Random Forest Model with Validation Set
+####################################
+
+#Start Timer
+startTime <- proc.time()
+
+#Train
+train_validation <- train(ACTIVITY ~ ., method = "Rborist", 
+                  data = validationSet,
+                  metric = "Sens",
+                  tuneGrid = data.frame(predFixed = 2, minNode = 9),
+                  trControl=trainControl(method="cv", 
+                                         number=5,
+                                         summaryFunction = twoClassSummary,
+                                         classProbs = TRUE,
+                                         savePredictions='all'))
+
+#Stop Timer and Record time
+totalTime <- proc.time() - startTime
+####################################
+# Accuracy and Performance
+####################################
+
+# Predict training set for confusion Matrix
+predictions_validation <- predict(train_validation, validationSet)
+# Get Accuracy information with confusion matrix
+confusionMatrix_validation <- confusionMatrix(predictions_validation, validationSet$ACTIVITY)
+confusionMatrix_validation
+# Time Taken in Seconds by Final Modeling against Validation Set
+totalTime["elapsed"]
+
+
+####################################
+# Further Analysis
+####################################
+
+# check PCA
+pca <- fallData %>% mutate(ACTIVITY=as.numeric(ACTIVITY)) %>% prcomp(scale=TRUE, center=TRUE)
+pcaSumary <- summary(pca)
+pcaSumary
 
 ```
-Patients with Liver disease have been continuously increasing because of excessive consumption of alcohol, inhale of harmful gases, intake of contaminated food, pickles and drugs. This dataset was used to evaluate prediction algorithms in an effort to reduce burden on doctors.
-
-This data set contains 416 liver patient records and 167 non liver patient records collected from North East of Andhra Pradesh, India. The "Dataset" column is a class label used to divide groups into liver patient (liver disease) or not (no disease). This data set contains 441 male patient records and 142 female patient records.
-
-Any patient whose age exceeded 89 is listed as being of age "90".
-```
-
 
 ## The Dataset
 
-https://www.kaggle.com/uciml/indian-liver-patient-records
+The Data set used for this paper is a data set created for the following paper: 
 
-     
-     https://www.kaggle.com/new-york-city/nyc-property-sales
-     - modified to have sale prices into X categories 
-            - based on census project https://www.kaggle.com/uciml/adult-census-income
-            
-      ^^^ MAYBE.... CHECK OTHER EXAMPLES And SEE what novel things you can do with Regression
-      
-     
+> *Özdemir, Ahmet Turan, and Billur Barshan. “Detecting Falls with Wearable Sensors Using Machine Learning Techniques.” Sensors (Basel, Switzerland) 14.6 (2014): 10691–10708. PMC. Web. 23 Apr. 2017.*
+
+The data was downloaded from kaggle.com (https://www.kaggle.com/pitasr/falldata), without reading the accompanying paper so as to not bias the predictive modeling creating for this paper. However, to understand the history and context of the data a brief synopsis was read and will be summarized here. The data was taken from the medical information and activities of elderly patients in China. There are roughly 16,000 data points of patients in different states of being. The purpose of the original paper was to create a classification algorithm for a potential wearable device to detect whether or not a patient was in the process of falling down. The reason for this is that falling can cause serious injuries in elderly patients and so medical responders can get to patients as quickly as possible to aid injured patients.
+
 ## Variables
+    
+The variable *Activities* are classified as: Standing (0), Walking (1), Sitting (2), Falling (3), Cramps (4) and Running (5). Medical information that is being recorded is: monitoring time (TIME), sugar level (SL), EEG monitoring rate (EEG), blood pressure (BP), heart rate (HR) and blood circulation (Circulation). The preview of the data set is shown below:
+
+```{r dataset, echo=FALSE}
+head(fallData)
+```
+
 
 ##	Project Goals
 
+  The goals of this paper will be the same as the original paper for which this data was collected. Although no bias from the original paper was used or influenced the following modeling in any way.
+
 ##	Key Steps
+
+  1. Prepare Data for Analysis
+  2. Use Binary Classification Algorithms and compare to find the optimal solution
+  3. Validate the optimal solution against a test set for official results
 
 #	Methods & Analysis
 ## Process 
+
+  The data will be explored and visualized to see if there are any ways in which the data can further be prepared for better testing.
+  The data will be prepared as such and further prepared for binary classification according to the primary task of detecting a falling patient.
+  Then the data set will be partitioned for validation for final testing purposes and cross-validation sets to compare different models.
+  We will then use the following algorithms on different cross-validation sets to train models for prediction:
+    1. KNN
+    2. QDA
+    3. Classification (Decision) Tree
+    4. Random Tree
+  Next, we will select the optimal training algorithm and test it on our validation set for a non-biased assessment of the algorithm's performance.
+  
 ## Techniques
 ### Data Cleaning
-###	Data Exploration 
+  Thankfully, much of the data has already been cleaned by the aforementioned team doing the original study.
+  To further clean the data we will look for any NAN values that may not be optimal for the simple models we are looking at in this paper. We have found no NAN values:
+
+```{r clean, echo=FALSE}
+message(amtNANValues)
+```
+  
+### Data Preparation
+
+  To prepare for data modeling we will separate our data into a validation set and training set. We will be splitting the data equally into 2 parts, as the following research paper recommends:
+  
+  >Korjus, Kristjan & Hebart, Martin & Vicente, Raul. (2016). An Efficient Data Partitioning to Improve Classification Performance While Keeping Parameters Interpretable. PLOS ONE. 11. e0161788. 10.1371/journal.pone.0161788. 
+  
+  It states "In general, for the empirical data sets used in this article and for maximizing statistical sensitivity, the optimal test set size was around 50%."
+  
+  Further, in order to test out different models, we will separate our training set roughly equally into 4 cross-validation sets. 
+  
+  Also, we must prepare our data for bi-variate classification. A sophisticated analysis could attempt a more complex multivariate classification strategy, which would be useful for a hypothetical wearable device. However, since the main goal of this study is to detect a falling elderly person in order to avoid personal injury, we will perform a simpler classification of "falling" vs "not falling". A more nuanced model will require optimization of other categories of activities that could detract from the optimization of detecting for a fall.
+  To do this we will simplify the categories of the ACTIVITY variable to TRUE or FALSE, where TRUE represents the condition that a person is falling and FALSE represents another condition.
+
+###	Data Exploration on Original Non-Partitioned Data Set 
+
+Correlation of Rating Index with 'ACTIVITY' Value
+```{r dataExploration1, echo=FALSE}
+rowCorrelation
+```
+
+Variables with Near Zero Variance
+```{r explore1, echo=FALSE}
+columnsNearZero
+```
+
+Mean of ACTIVITY
+```{r mean1, echo=FALSE}
+mean(fallData$ACTIVITY)
+```
+
+Mean of TIME
+```{r mean2, echo=FALSE}
+mean(fallData$TIME)
+```
+
+Mean of SL
+```{r mean3, echo=FALSE}
+mean(fallData$SL)
+```
+
+Mean of EEG
+```{r mean4, echo=FALSE}
+mean(fallData$EEG)
+```
+
+Mean of BP
+```{r mean5, echo=FALSE}
+mean(fallData$BP)
+```
+
+Mean of HR
+```{r mean6, echo=FALSE}
+mean(fallData$HR)
+```
+
+Mean of CIRCLUATION
+```{r mean7, echo=FALSE}
+mean(fallData$CIRCLUATION)
+```
+
 ###	Data Visualization
+
+```{r mean9, echo=FALSE}
+hist(fallData$TIME)
+```
+
+```{r mean10, echo=FALSE}
+hist(fallData$SL)
+```
+
+```{r mean11, echo=FALSE}
+hist(fallData$EEG)
+```
+
+```{r mean12, echo=FALSE}
+hist(fallData$BP)
+```
+
+```{r mean13, echo=FALSE}
+hist(fallData$HR)
+```
+
+```{r mean14, echo=FALSE}
+hist(fallData$CIRCLUATION)
+```
+
 ###	Insights 
+  First we checked the correlation of the row indexes with the values of the ACTIVITY variable to make sure that rows are sufficiently randomized. Since we get a pearson's correlation coefficient of between -.01 and .01, this meets the more rigorous scientific definitions of guaranteed randomness.
+  We also looked to see if there were any variables with near zero variance that could be removed to save memory and processing time, but none were found.
+  We also notice that variables are not normally distributed. This study will not use mean normalization and feature scaling to correct these distributions, however in further analyses it should be used.
+
 ###	Modeling Approach
 
- At least two different models or algorithms must be used, with at least one being more advanced than linear or logistic regression for prediction problems.
+For our model, we will attempt to predict our new bi-variate variable *ACTIVITY* using all of our other variables. We will use the modeling techniques listed above. We will use a separate cross-validation set for each type of modeling.
+  First however we will do an initial assessment of our modeling techniques by looking at the performance numbers of KNN optimizing for the "caret" package's default performance metric of Accuracy using bootstrapping. Also with our KNN model we will repeat the modeling using values of K from 9 to 71, increment by 2. We will then use the optimal value of K in the final model that we assess.
+
+### KNN optimized for Accuracy (Bootstrap)
+
+#### plot of Accuracy's by value of K
+```{r knn_A_plot, echo=FALSE}
+plot_knn1
+```
+
+#### Confusion Matrix and Performance Data
+```{r knn_A, echo=FALSE}
+confusionMatrix_knn1
+```
+
+#### Initial Analysis
+  
+  We found that the optimal k value for this model was k=69
+  
+  Looking at the different metrics of performance we can see that we are sacrificing perhaps too much sensitivity for accuracy. If we inspect the goals of our study, which are to respond to injuries of elderly patients as quickly as possible, then medical professionals may tolerate a high amount of false positives if it maximizes the amount patients that are adequately detected as having fallen and treated in a fast manner. Therefore we will perform all of our models optimizing for sensitivity. 
+
+### KNN - Optimized for Sensitivity
+```{r knn_S_plot, echo=FALSE}
+plot_knn2
+```
+
+```{r knn_S, echo=FALSE}
+confusionMatrix_knn2
+```
+
+We found that the optimal k value for this model was k=9
+
+### QDA - Optimized for Sensitivity
+
+```{r qda, echo=FALSE}
+confusionMatrix_qda
+```
+
+### Classification (Decision) Tree - Optimized for Sensitivity
+
+  With our Classification Tree model we will repeat the modeling using 25 different values of cp from 0 to 71, at equal intervals.
+
+```{r ct_plot, echo=FALSE}
+plot_rpart
+```
+
+```{r ct, echo=FALSE}
+confusionMatrix_rpart
+```
+
+  We found that the optimal k value for this model was cp = 0.
+
+### Random Forest - Optimized for Sensitivity
+TODO: use smaller tuning values
+
+  With our Random Forest model we will repeat the modeling using 25 different values of minNode of all integers from 3 to 50.
+
+```{r rf_plot, echo=FALSE}
+plot_rf
+```
+
+```{r rf, echo=FALSE}
+confusionMatrix_rf
+```
+
+  We found that the optimal k value for this model was minNode=9
 
 #	Final Model
+
+## Process
+
+Looking at our models, we have seen that the optimal model seems to be our Random Forest algorithm with minNode value of 9.
+
+Therefore we will rerun that optimal mode with that min value on our validation set and assess the performance of our model.
+
+
 ##	Results 
-        RMSE <= .86490
+
+Our final model has a sensitivity metric of 0.8790, which means that 0.8790% of all patients who were falling were accurately reported as such. This is a much larger percentage of the 
+
+Further Perfomance Metrics:
+```{r valid, echo=FALSE}
+confusionMatrix_validation
+```
+
+        
 ##	Performance
 
+  To assess the speed at which the final model took, we will at the number of seconds that it took to run on a specific computer.
+  
+### Computer Specifications
+
+MacBook Pro (Retina, 13-inch, Early 2015)
+Processor: 3.1 GHz Dual-Core Intel Core i7
+Memory: 16 GB 1867 MHz DDR3
+  
+### Time in Seconds
+```{r time, echo=FALSE}
+message(totalTime["elapsed"])
+```
 #	conclusion
+
 ##	Summary
+  We see now that the modeling approach outlined multiple times above was somewhat successful and regularization was effective in reducing the RMSE. During the final modeling, the RMSE was recorded of the simplified model using only the mean of all ratings, which we will call the "Baseline" RMSE. We will now see how that compares to the final RMSE and use that as a baseline to see how effective our optimization techniques were.
+  
 ##	Limitations 
+  The models used in this paper where quite simplistic analysis. For a more nuanced and better performing model we could potentially also reduce the amount of false positives to more avoid wasting the time of medical professionals and patients responding to non-existent falls.
+  
 ##	Future work
+  In the future, I hope to continue this work, using a higher-performing machine with more rigorous models for predicting movie ratings. 
+  Further, since the distribution of variables were not normally distributed and did not have the same mean values, a future study should use mean normalization and feature scaling in hopes of getting a more accurate model.
+  Also, doing a Principle Component Analysis, we can see that the cumulative proportion of variance is greater tham .95 at PC4. This indicates that there is the ability to do singular value decomposition to reduce the amount of data being used while maintaining a variance of > .95, which is a recommended level of variance to keep when doing SVD
+  
+```{r pca, echo=FALSE}
+pcaSumary
+```
+
