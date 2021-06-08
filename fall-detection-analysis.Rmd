@@ -1,5 +1,5 @@
 ---
-title: "ChooseYourOwn_Report"
+title: "Detecting Falls in Elderly Patients using Machine Learning Algorithms on Medical Data"
 author: "Will Powers"
 date: "12/28/2020"
 output: pdf_document
@@ -23,24 +23,24 @@ if(!require(Rborist)) install.packages('Rborist', dependencies = TRUE, repos = "
 ###############################################################
 # Import Data 
 ###############################################################
-fallData <- read_csv("https://raw.githubusercontent.com/willcpo/fall-detection-analysis/main/falldeteciton.csv")
+fallDataRaw <- read_csv("https://raw.githubusercontent.com/willcpo/fall-detection-analysis/main/falldeteciton.csv")
 
 ###############################################################
 # Data Exploration
 ###############################################################
 
 # Check for NAN values
-amtNANValues <- sum(is.na(fallData))
+amtNANValues <- sum(is.na(fallDataRaw))
 # None Detected
 amtNANValues
 
 # check for features with little variation
-columnsNearZero <- nearZeroVar(fallData)
+columnsNearZero <- nearZeroVar(fallDataRaw)
 # None Detected
 columnsNearZero
 
-fallDataRowIndexes <- 1:length(fallData$ACTIVITY)
-rowCorrelation <- cor(fallDataRowIndexes, fallData$ACTIVITY)
+fallDataRowIndexes <- 1:length(fallDataRaw$ACTIVITY)
+rowCorrelation <- cor(fallDataRowIndexes, fallDataRaw$ACTIVITY)
 rowCorrelation
 
 ###############################################################
@@ -48,7 +48,7 @@ rowCorrelation
 ###############################################################
 
 #Alter Activity Column as Falling or not falling
-fallData <- fallData %>% mutate(ACTIVITY=as.factor(ACTIVITY==3))
+fallData <- fallDataRaw %>% mutate(ACTIVITY=as.factor(ACTIVITY==3))
 #Reverses factor order to make TRUE the positive class
 fallData <- fallData %>% mutate(ACTIVITY=factor(ACTIVITY, levels=rev(levels(ACTIVITY)),labels = make.names(rev(levels(ACTIVITY)))))
 
@@ -290,15 +290,12 @@ Correlation of Rating Index with 'ACTIVITY' Value
 rowCorrelation
 ```
 
-Variables with Near Zero Variance
+Variables with Near-Zero Variance
 ```{r explore1, echo=FALSE}
 columnsNearZero
 ```
+integer(0) represents an empty array, which means there are no such variables
 
-Mean of ACTIVITY
-```{r mean1, echo=FALSE}
-mean(fallData$ACTIVITY)
-```
 
 Mean of TIME
 ```{r mean2, echo=FALSE}
@@ -357,18 +354,19 @@ hist(fallData$CIRCLUATION)
 ```
 
 ###	Insights 
-  First we checked the correlation of the row indexes with the values of the ACTIVITY variable to make sure that rows are sufficiently randomized. Since we get a pearson's correlation coefficient of between -.01 and .01, this meets the more rigorous scientific definitions of guaranteed randomness.
+  First we checked the correlation of the row indexes with the values of the ACTIVITY variable to make sure that rows are sufficiently randomized. Since we get a Pearson's correlation coefficient of between -.01 and .01, this meets the more rigorous scientific definitions of guaranteed randomness.
   We also looked to see if there were any variables with near zero variance that could be removed to save memory and processing time, but none were found.
   We also notice that variables are not normally distributed. This study will not use mean normalization and feature scaling to correct these distributions, however in further analyses it should be used.
 
 ###	Modeling Approach
 
-For our model, we will attempt to predict our new bi-variate variable *ACTIVITY* using all of our other variables. We will use the modeling techniques listed above. We will use a separate cross-validation set for each type of modeling.
+  For our model, we will attempt to predict our new bi-variate variable *ACTIVITY* using all of our other variables. We will use the modeling techniques listed above. We will use a separate cross-validation set for each type of modeling.
   First however we will do an initial assessment of our modeling techniques by looking at the performance numbers of KNN optimizing for the "caret" package's default performance metric of Accuracy using bootstrapping. Also with our KNN model we will repeat the modeling using values of K from 9 to 71, increment by 2. We will then use the optimal value of K in the final model that we assess.
 
 ### KNN optimized for Accuracy (Bootstrap)
+#### Plot of Accuracies by value of K
+The following plot shows the accuracy metric for each iteration of the modeling algorithm, varying over values of k.
 
-#### plot of Accuracy's by value of K
 ```{r knn_A_plot, echo=FALSE}
 plot_knn1
 ```
@@ -380,7 +378,7 @@ confusionMatrix_knn1
 
 #### Initial Analysis
   
-  We found that the optimal k value for this model was k=69
+We found that the optimal k value for this model was k=69
   
   Looking at the different metrics of performance we can see that we are sacrificing perhaps too much sensitivity for accuracy. If we inspect the goals of our study, which are to respond to injuries of elderly patients as quickly as possible, then medical professionals may tolerate a high amount of false positives if it maximizes the amount patients that are adequately detected as having fallen and treated in a fast manner. Therefore we will perform all of our models optimizing for sensitivity. 
 
@@ -416,7 +414,6 @@ confusionMatrix_rpart
   We found that the optimal k value for this model was cp = 0.
 
 ### Random Forest - Optimized for Sensitivity
-TODO: use smaller tuning values
 
   With our Random Forest model we will repeat the modeling using 25 different values of minNode of all integers from 3 to 50.
 
@@ -469,12 +466,12 @@ message(totalTime["elapsed"])
   We see now that the modeling approach outlined multiple times above was somewhat successful and regularization was effective in reducing the RMSE. During the final modeling, the RMSE was recorded of the simplified model using only the mean of all ratings, which we will call the "Baseline" RMSE. We will now see how that compares to the final RMSE and use that as a baseline to see how effective our optimization techniques were.
   
 ##	Limitations 
-  The models used in this paper where quite simplistic analysis. For a more nuanced and better performing model we could potentially also reduce the amount of false positives to more avoid wasting the time of medical professionals and patients responding to non-existent falls.
+  The models used in this paper were quite simplistic analysis. For a more nuanced and better-performing model we could potentially also reduce the amount of false positives to more avoid wasting the time of medical professionals and patients responding to non-existent falls.
   
 ##	Future work
   In the future, I hope to continue this work, using a higher-performing machine with more rigorous models for predicting movie ratings. 
   Further, since the distribution of variables were not normally distributed and did not have the same mean values, a future study should use mean normalization and feature scaling in hopes of getting a more accurate model.
-  Also, doing a Principle Component Analysis, we can see that the cumulative proportion of variance is greater tham .95 at PC4. This indicates that there is the ability to do singular value decomposition to reduce the amount of data being used while maintaining a variance of > .95, which is a recommended level of variance to keep when doing SVD
+  Also, doing a Principle Component Analysis, we can see that the cumulative proportion of variance is greater than .95 at PC4. This indicates that there is the ability to do singular value decomposition to reduce the amount of data being used while maintaining a variance of > .95, which is a recommended level of variance to keep when doing SVD
   
 ```{r pca, echo=FALSE}
 pcaSumary
